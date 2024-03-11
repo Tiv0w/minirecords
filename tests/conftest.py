@@ -1,21 +1,20 @@
-"""Shared pytest fixtures.
-
-"""
+"""Shared pytest fixtures."""
 import pytest
 
-import records
+import minirecords
 
 
-@pytest.fixture(params=[
-    # request: (sql_url_id, sql_url_template)
-
-    ('sqlite_memory', 'sqlite:///:memory:'),
-    ('sqlite_file', 'sqlite:///{dbfile}'),
-    # ('psql', 'postgresql://records:records@localhost/records')
-],
-    ids=lambda r: r[0])
+@pytest.fixture(
+    params=[
+        # request: (sql_url_id, sql_url_template)
+        ("sqlite_memory", "sqlite:///:memory:"),
+        ("sqlite_file", "sqlite:///{dbfile}"),
+        # ('psql', 'postgresql://records:records@localhost/records')
+    ],
+    ids=lambda r: r[0],
+)
 def db(request, tmpdir):
-    """Instance of `records.Database(dburl)`
+    """Instance of `records.Database(dburl)`.
 
     Ensure, it gets closed after being used in a test or fixture.
 
@@ -28,7 +27,7 @@ def db(request, tmpdir):
     id, url = request.param
     # replace {dbfile} in url with temporary db file path
     url = url.format(dbfile=str(tmpdir / "db.sqlite"))
-    db = records.Database(url)
+    db = minirecords.Database(url)
     yield db  # providing fixture value for a test case
     # tear_down
     db.close()
@@ -36,12 +35,12 @@ def db(request, tmpdir):
 
 @pytest.fixture
 def foo_table(db):
-    """Database with table `foo` created
+    """Database with table `foo` created.
 
     tear_down drops the table.
 
     Typically applied by `@pytest.mark.usefixtures('foo_table')`
     """
-    db.query('CREATE TABLE foo (a integer)')
+    db.query("CREATE TABLE foo (a integer)")
     yield
-    db.query('DROP TABLE foo')
+    db.query("DROP TABLE foo")

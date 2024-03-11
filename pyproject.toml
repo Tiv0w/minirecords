@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "minirecords"
+version = "0.1.0"
+description = "SQL for Humans -- reloaded"
+authors = ["Tiv0w <t.theomeyer@gmail.com>"]
+license = "ISC"
+readme = "README.rst"
+packages = [{ include = "minirecords.py" }]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+sqlalchemy = "^2.0.28"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.1.1"
+python-lsp-server = {extras = ["all"], version = "^1.10.0"}
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
