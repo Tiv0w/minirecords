@@ -8,7 +8,7 @@ import sqlalchemy as sq
 from sqlalchemy import create_engine, exc, inspect, text
 
 
-def isexception(obj):
+def isexception(obj) -> bool:
     """Return a boolean indicating whether the given object is an Exception.
 
     More precisely, if it is an instance or subclass of :py:class:`Exception`.
@@ -25,7 +25,7 @@ class Record(object):
 
     __slots__ = ("_keys", "_values")
 
-    def __init__(self, keys, values):
+    def __init__(self, keys: list[str], values):
         self._keys = keys
         self._values = values
 
@@ -75,7 +75,7 @@ class Record(object):
         except KeyError:
             return default
 
-    def as_dict(self, ordered=False):
+    def as_dict(self, ordered: bool = False) -> OrderedDict | dict:
         """Return the row as a dictionary, as ordered."""
         items = zip(self.keys(), self.values())
 
@@ -184,7 +184,9 @@ class RecordCollection(object):
 
     #     return data
 
-    def all(self, as_dict=False, as_ordereddict=False):
+    def all(
+        self, as_dict: bool = False, as_ordereddict: bool = False
+    ) -> list[OrderedDict | dict]:
         """Return a list of all rows for the RecordCollection.
 
         If they haven't been fetched yet, consume the iterator and cache the results.
@@ -199,10 +201,10 @@ class RecordCollection(object):
 
         return rows
 
-    def as_dict(self, ordered=False):
+    def as_dict(self, ordered: bool = False) -> list[OrderedDict | dict]:
         return self.all(as_dict=not (ordered), as_ordereddict=ordered)
 
-    def first(self, default=None, as_dict=False, as_ordereddict=False):
+    def first(self, default=None, as_dict: bool = False, as_ordereddict: bool = False):
         """Return a single record for the RecordCollection, or `default`.
 
         If `default` is an instance or subclass of Exception, then raise it
@@ -284,7 +286,7 @@ class Connection(object):
         which can be iterated over to get result rows as dictionaries.
         """
         # Execute the given query.
-        cursor = self._conn.execute(text(query), parameters, **kwargs)
+        cursor: sq.CursorResult = self._conn.execute(text(query), parameters, **kwargs)
         # self._conn.commit()
 
         if cursor.returns_rows:
