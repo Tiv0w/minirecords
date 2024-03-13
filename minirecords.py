@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import os
 
 from collections import OrderedDict
@@ -11,8 +9,9 @@ from sqlalchemy import create_engine, exc, inspect, text
 
 
 def isexception(obj):
-    """Given an object, return a boolean indicating whether it is an instance
-    or subclass of :py:class:`Exception`.
+    """Return a boolean indicating whether the given object is an Exception.
+
+    More precisely, if it is an instance or subclass of :py:class:`Exception`.
     """
     if isinstance(obj, Exception):
         return True
@@ -42,7 +41,7 @@ class Record(object):
         return self._values
 
     def __repr__(self):
-        return "<Record {}>".format(self.export("json")[1:-1])
+        return "<Record {}>".format(self.keys())
 
     def __getitem__(self, key):
         # Support for index-based lookup.
@@ -110,9 +109,7 @@ class RecordCollection(object):
         return "<RecordCollection size={} pending={}>".format(len(self), self.pending)
 
     def __iter__(self):
-        """Iterate over all rows, consuming the underlying generator
-        only when necessary.
-        """
+        """Iterate over all rows, consuming the underlying generator only when necessary."""
         i = 0
         while True:
             # Other code may have iterated between yields,
@@ -206,10 +203,11 @@ class RecordCollection(object):
         return self.all(as_dict=not (ordered), as_ordereddict=ordered)
 
     def first(self, default=None, as_dict=False, as_ordereddict=False):
-        """Returns a single record for the RecordCollection, or `default`. If
-        `default` is an instance or subclass of Exception, then raise it
-        instead of returning it."""
+        """Return a single record for the RecordCollection, or `default`.
 
+        If `default` is an instance or subclass of Exception, then raise it
+        instead of returning it.
+        """
         # Try to get a record, or return/raise default.
         try:
             record = self[0]
@@ -227,10 +225,11 @@ class RecordCollection(object):
             return record
 
     def one(self, default=None, as_dict=False, as_ordereddict=False):
-        """Returns a single record for the RecordCollection, ensuring that it
-        is the only record, or returns `default`. If `default` is an instance
-        or subclass of Exception, then raise it instead of returning it."""
+        """Return a single record for the RecordCollection.
 
+        It ensures that it is the only record, or returns `default`. If `default` is an instance
+        or subclass of Exception, then raise it instead of returning it.
+        """
         # Ensure that we don't have more than one row.
         try:
             self[1]
@@ -246,14 +245,15 @@ class RecordCollection(object):
             )
 
     def scalar(self, default=None):
-        """Returns the first column of the first row, or `default`."""
+        """Return the first column of the first row, or `default`."""
         row = self.one()
         return row[0] if row else default
 
 
 class Database(object):
-    """A Database. Encapsulates a url and an SQLAlchemy engine with a pool of
-    connections.
+    """A Database.
+
+    Encapsulates a url and an SQLAlchemy engine with a pool of connections.
     """
 
     def __init__(self, db_url=None, **kwargs):
@@ -268,7 +268,7 @@ class Database(object):
         self.open = True
 
     def close(self):
-        """Closes the Database."""
+        """Close the Database."""
         self._engine.dispose()
         self.open = False
 
@@ -282,56 +282,60 @@ class Database(object):
         return "<Database open={}>".format(self.open)
 
     def get_table_names(self, internal=False):
-        """Returns a list of table names for the connected database."""
-
+        """Return a list of table names for the connected database."""
         # Setup SQLAlchemy for Database inspection.
         return inspect(self._engine).get_table_names()
 
     def get_connection(self):
-        """Get a connection to this Database. Connections are retrieved from a
-        pool.
+        """Get a connection to this Database.
+
+        Connections are retrieved from a pool.
         """
         if not self.open:
             raise exc.ResourceClosedError("Database closed.")
 
         return Connection(self._engine.connect())
 
-    def query(self, query, fetchall=False, **params):
-        """Executes the given SQL query against the Database. Parameters can,
-        optionally, be provided. Returns a RecordCollection, which can be
+    def query(
+        self,
+        query: str,
+        parameters: dict | None = None,
+        *,
+        fetchall: bool = False,
+        **kwargs
+    ) -> RecordCollection:
+        """Execute the given SQL query against the Database.
+
+        Parameters can, optionally, be provided. Returns a RecordCollection, which can be
         iterated over to get result rows as dictionaries.
         """
         with self.get_connection() as conn:
-            return conn.query(query, fetchall, **params)
+            return conn.query(query, parameters, fetchall=fetchall, **kwargs)
 
     def bulk_query(self, query, *multiparams):
         """Bulk insert or update."""
-
         with self.get_connection() as conn:
             conn.bulk_query(query, *multiparams)
 
     def query_file(self, path, fetchall=False, **params):
         """Like Database.query, but takes a filename to load a query from."""
-
         with self.get_connection() as conn:
             return conn.query_file(path, fetchall, **params)
 
     def bulk_query_file(self, path, *multiparams):
         """Like Database.bulk_query, but takes a filename to load a query from."""
-
         with self.get_connection() as conn:
             conn.bulk_query_file(path, *multiparams)
 
     @contextmanager
     def transaction(self):
-        """A context manager for executing a transaction on this Database."""
-
+        """Yield a context manager for executing a transaction on this Database."""
         conn = self.get_connection()
         tx = conn.transaction()
         try:
             yield conn
             tx.commit()
-        except:
+        except Exception:
             tx.rollback()
         finally:
             conn.close()
@@ -357,23 +361,26 @@ class Connection(object):
     def __repr__(self):
         return "<Connection open={}>".format(self.open)
 
-    def query(self, query, fetchall=False, **params):
-        """Executes the given SQL query against the connected Database.
+    def query(
+        self,
+        query: str,
+        parameters: dict | None = None,
+        *,
+        fetchall: bool = False,
+        **kwargs
+    ):
+        """Execute the given SQL query against the connected Database.
+
         Parameters can, optionally, be provided. Returns a RecordCollection,
         which can be iterated over to get result rows as dictionaries.
         """
-
         # Execute the given query.
-        cursor = self._conn.execute(text(query), **params)  # TODO: PARAMS GO HERE
+        cursor = self._conn.execute(text(query), parameters, **kwargs)
         self._conn.commit()
-        print(cursor)
-        print(type(cursor))
-
-        # print(cursor.keys())
 
         if cursor.returns_rows:
             # Row-by-row Record generator.
-            row_gen = (Record(cursor.keys(), row) for row in cursor)
+            row_gen = (Record(list(cursor.keys()), row) for row in cursor)
 
             # Convert psycopg2 results to RecordCollection.
             results: RecordCollection = RecordCollection(row_gen)
@@ -381,19 +388,17 @@ class Connection(object):
             # Fetch all results if desired.
             if fetchall:
                 results.all()
-            else:
-                results = []
+        else:
+            results = RecordCollection([])
 
         return results
 
     def bulk_query(self, query, *multiparams):
         """Bulk insert or update."""
-
         self._conn.execute(text(query), *multiparams)
 
     def query_file(self, path, fetchall=False, **params):
         """Like Connection.query, but takes a filename to load a query from."""
-
         # If path doesn't exists
         if not os.path.exists(path):
             raise IOError("File '{}' not found!".format(path))
@@ -410,10 +415,7 @@ class Connection(object):
         return self.query(query=query, fetchall=fetchall, **params)
 
     def bulk_query_file(self, path, *multiparams):
-        """Like Connection.bulk_query, but takes a filename to load a query
-        from.
-        """
-
+        """Like Connection.bulk_query, but takes a filename to load a query from."""
         # If path doesn't exists
         if not os.path.exists(path):
             raise IOError("File '{}'' not found!".format(path))
@@ -429,17 +431,16 @@ class Connection(object):
         self._conn.execute(text(query), *multiparams)
 
     def transaction(self):
-        """Returns a transaction object. Call ``commit`` or ``rollback``
-        on the returned object as appropriate."""
+        """Return a transaction object.
 
+        Call ``commit`` or ``rollback`` on the returned object as appropriate.
+        """
         return self._conn.begin()
 
 
 # def _reduce_datetimes(row):
 #     """Receives a row, converts datetimes to strings."""
-
 #     row = list(row)
-
 #     for i in range(len(row)):
 #         if hasattr(row[i], 'isoformat'):
 #             row[i] = row[i].isoformat()
