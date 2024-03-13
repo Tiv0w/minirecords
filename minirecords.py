@@ -250,97 +250,6 @@ class RecordCollection(object):
         return row[0] if row else default
 
 
-class Database(object):
-    """A Database.
-
-    Encapsulates a url and an SQLAlchemy engine with a pool of connections.
-    """
-
-    def __init__(self, db_url=None, **kwargs):
-        # If no db_url was provided, fallback to $DATABASE_URL.
-        self.db_url = db_url or os.environ.get("DATABASE_URL")
-
-        if not self.db_url:
-            raise ValueError("You must provide a db_url.")
-
-        # Create an engine.
-        self._engine = create_engine(self.db_url, **kwargs)
-        self.open = True
-
-    def close(self):
-        """Close the Database."""
-        self._engine.dispose()
-        self.open = False
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc, val, traceback):
-        self.close()
-
-    def __repr__(self):
-        return "<Database open={}>".format(self.open)
-
-    def get_table_names(self, internal=False):
-        """Return a list of table names for the connected database."""
-        # Setup SQLAlchemy for Database inspection.
-        return inspect(self._engine).get_table_names()
-
-    def get_connection(self):
-        """Get a connection to this Database.
-
-        Connections are retrieved from a pool.
-        """
-        if not self.open:
-            raise exc.ResourceClosedError("Database closed.")
-
-        return Connection(self._engine.connect())
-
-    def query(
-        self,
-        query: str,
-        parameters: dict | None = None,
-        *,
-        fetchall: bool = False,
-        **kwargs
-    ) -> RecordCollection:
-        """Execute the given SQL query against the Database.
-
-        Parameters can, optionally, be provided. Returns a RecordCollection, which can be
-        iterated over to get result rows as dictionaries.
-        """
-        with self.get_connection() as conn:
-            return conn.query(query, parameters, fetchall=fetchall, **kwargs)
-
-    def bulk_query(self, query, *multiparams):
-        """Bulk insert or update."""
-        with self.get_connection() as conn:
-            conn.bulk_query(query, *multiparams)
-
-    def query_file(self, path, fetchall=False, **params):
-        """Like Database.query, but takes a filename to load a query from."""
-        with self.get_connection() as conn:
-            return conn.query_file(path, fetchall, **params)
-
-    def bulk_query_file(self, path, *multiparams):
-        """Like Database.bulk_query, but takes a filename to load a query from."""
-        with self.get_connection() as conn:
-            conn.bulk_query_file(path, *multiparams)
-
-    @contextmanager
-    def transaction(self):
-        """Yield a context manager for executing a transaction on this Database."""
-        conn = self.get_connection()
-        tx = conn.transaction()
-        try:
-            yield conn
-            tx.commit()
-        except Exception:
-            tx.rollback()
-        finally:
-            conn.close()
-
-
 class Connection(object):
     """A Database connection."""
 
@@ -368,7 +277,7 @@ class Connection(object):
         *,
         fetchall: bool = False,
         **kwargs
-    ):
+    ) -> RecordCollection:
         """Execute the given SQL query against the connected Database.
 
         Parameters can, optionally, be provided. Returns a RecordCollection,
@@ -376,7 +285,7 @@ class Connection(object):
         """
         # Execute the given query.
         cursor = self._conn.execute(text(query), parameters, **kwargs)
-        self._conn.commit()
+        # self._conn.commit()
 
         if cursor.returns_rows:
             # Row-by-row Record generator.
@@ -392,6 +301,12 @@ class Connection(object):
             results = RecordCollection([])
 
         return results
+
+    def _commit(self) -> None:
+        self._conn.commit()
+
+    def _rollback(self) -> None:
+        self._conn.rollback()
 
     def bulk_query(self, query, *multiparams):
         """Bulk insert or update."""
@@ -436,6 +351,98 @@ class Connection(object):
         Call ``commit`` or ``rollback`` on the returned object as appropriate.
         """
         return self._conn.begin()
+
+
+class Database(object):
+    """A Database.
+
+    Encapsulates a url and an SQLAlchemy engine with a pool of connections.
+    """
+
+    def __init__(self, db_url=None, **kwargs):
+        # If no db_url was provided, fallback to $DATABASE_URL.
+        self.db_url = db_url or os.environ.get("DATABASE_URL")
+
+        if not self.db_url:
+            raise ValueError("You must provide a db_url.")
+
+        # Create an engine.
+        self._engine = create_engine(self.db_url, **kwargs)
+        self.open = True
+
+    def close(self):
+        """Close the Database."""
+        self._engine.dispose()
+        self.open = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc, val, traceback):
+        self.close()
+
+    def __repr__(self):
+        return "<Database open={}>".format(self.open)
+
+    def get_table_names(self, internal: bool = False) -> list[str]:
+        """Return a list of table names for the connected database."""
+        # Setup SQLAlchemy for Database inspection.
+        return inspect(self._engine).get_table_names()
+
+    def get_connection(self) -> Connection:
+        """Get a connection to this Database.
+
+        Connections are retrieved from a pool.
+        """
+        if not self.open:
+            raise exc.ResourceClosedError("Database closed.")
+
+        return Connection(self._engine.connect())
+
+    def query(
+        self,
+        query: str,
+        parameters: dict | None = None,
+        *,
+        fetchall: bool = False,
+        **kwargs
+    ) -> RecordCollection:
+        """Execute the given SQL query against the Database.
+
+        Parameters can, optionally, be provided. Returns a RecordCollection, which can be
+        iterated over to get result rows as dictionaries.
+        """
+        with self.get_connection() as conn:
+            with conn._conn.begin():
+                return conn.query(query, parameters, fetchall=fetchall, **kwargs)
+
+    def bulk_query(self, query, *multiparams):
+        """Bulk insert or update."""
+        with self.get_connection() as conn:
+            conn.bulk_query(query, *multiparams)
+
+    def query_file(self, path, fetchall=False, **params):
+        """Like Database.query, but takes a filename to load a query from."""
+        with self.get_connection() as conn:
+            return conn.query_file(path, fetchall, **params)
+
+    def bulk_query_file(self, path, *multiparams):
+        """Like Database.bulk_query, but takes a filename to load a query from."""
+        with self.get_connection() as conn:
+            conn.bulk_query_file(path, *multiparams)
+
+    @contextmanager
+    def transaction(self):
+        """Yield a context manager for executing a transaction on this Database."""
+        conn = self.get_connection()
+        tx = conn.transaction()
+        try:
+            yield conn
+            tx.commit()
+        except Exception:
+            tx.rollback()
+        finally:
+            conn.close()
 
 
 # def _reduce_datetimes(row):

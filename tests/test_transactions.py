@@ -33,6 +33,7 @@ def test_plain_conn(db):
     conn = db.get_connection()
     conn.query('INSERT INTO foo VALUES (42)')
     conn.query('INSERT INTO foo VALUES (43)')
+    conn._commit()
     assert conn.query('SELECT count(*) AS n FROM foo')[0].n == 2
 
 
